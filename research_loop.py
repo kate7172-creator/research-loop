@@ -20,16 +20,12 @@ MAX_ROUNDS = 4
 
 # --- Search ---
 
-def search(query: str) -> str:
-
-results = tavily_client.search(
-
-query=query,
-
-search_depth="advanced",
-
-max_results=5,
-
+def search_web(query):
+    results = tavily_client.search(
+        query=query,
+        search_depth="advanced",
+        max_results=5
+    )
 include_raw_content=False
 
 )
