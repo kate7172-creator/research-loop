@@ -1,58 +1,79 @@
 import os
-
 import re
 
 import streamlit as st
-
 from groq import Groq
-
 from tavily import TavilyClient
+
+
+# --- Page config ---
+
+st.set_page_config(
+    page_title="Research Loop",
+    page_icon="🔍",
+    layout="wide"
+)
+
 
 # --- Clients ---
 
-groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+groq_api_key = os.environ.get("GROQ_API_KEY")
+tavily_api_key = os.environ.get("TAVILY_API_KEY")
 
-tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
+if not groq_api_key:
+    st.error("Missing GROQ_API_KEY.")
+    st.stop()
+
+if not tavily_api_key:
+    st.error("Missing TAVILY_API_KEY.")
+    st.stop()
+
+groq_client = Groq(api_key=groq_api_key)
+tavily_client = TavilyClient(api_key=tavily_api_key)
 
 MODEL = "openai/gpt-oss-120b"
-
 MAX_ROUNDS = 4
+
 
 # --- Search ---
 
-def search_web(query):
+def search_web(query: str) -> str:
     results = tavily_client.search(
         query=query,
         search_depth="advanced",
-        max_results=5
+        max_results=5,
+        include_raw_content=False,
     )
-include_raw_content=False
 
-)
+    formatted = []
 
-formatted = []
+    for r in results.get("results", []):
+        formatted.append(
+            f"Source: {r.get('url', '')}\n"
+            f"Title: {r.get('title', '')}\n"
+            f"Content: {r.get('content', '')}\n"
+        )
 
-for r in results.get("results", []):
+    return "\n".join(formatted)
 
-formatted.append(f"Source: {r[’url’]}\nTitle: {r[’title’]}\nContent: {r[’content’]}\n")
-
-return "\n".join(formatted)
 
 # --- Generator ---
 
 def generator(question: str, feedback: str = "") -> tuple[str, str]:
+    search_query = question
 
-search_query = question
+    if feedback:
+        search_query = f"{question} {feedback}"
 
-if feedback:
+    search_results = search_web(search_query)
 
-search_query = f"{question} {feedback}"
+    feedback_section = (
+        f"\n\nPrevious evaluation feedback — address these gaps specifically:\n{feedback}"
+        if feedback
+        else ""
+    )
 
-search_results = search(search_query)
-
-feedback_section = f"\n\nPrevious evaluation feedback — address these gaps specifically:\n{feedback}" if feedback else ""
-
-prompt = f"""You are a research assistant producing answers for a professional Indian business newsletter.
+    prompt = f"""You are a research assistant producing answers for a professional Indian business newsletter.
 
 Your job: answer the research question below using the search results provided.
 
@@ -60,7 +81,7 @@ SOURCE RULES — these are strict and non-negotiable:
 
 - PREFER, in this order: (1) company filings, annual reports, investor presentations, earnings releases; (2) named business publications with a bylined journalist (Business Standard, Economic Times, Mint, Reuters, Bloomberg); (3) government or regulatory data.
 
-- NEVER cite: LinkedIn posts, Medium posts, personal blogs, PESTEL/SWOT analysis sites, listicles, SEO content farms, HBR case-study summaries republished by third parties, or any page that doesn’t name a specific author or institution.
+- NEVER cite: LinkedIn posts, Medium posts, personal blogs, PESTEL/SWOT analysis sites, listicles, SEO content farms, HBR case-study summaries republished by third parties, or any page that doesn't name a specific author or institution.
 
 - If a claim can only be supported by an excluded source, DROP the claim rather than cite a weak source.
 
@@ -68,17 +89,17 @@ SOURCE RULES — these are strict and non-negotiable:
 
 ANSWER RULES:
 
-- Cover all major angles — don’t stop at the first sufficient-looking answer
+- Cover all major angles — don't stop at the first sufficient-looking answer.
 
-- Lead with the most recent data available (latest quarter or full year), and name the reporting period
+- Lead with the most recent data available (latest quarter or full year), and name the reporting period.
 
-- Name a specific source for every claim, and include a number or data point wherever one exists
+- Name a specific source for every claim, and include a number or data point wherever one exists.
 
-- Flag explicitly if two sources contradict each other — never average them into one sentence
+- Flag explicitly if two sources contradict each other — never average them into one sentence.
 
-- Explain the business implication of each finding, not just the fact
+- Explain the business implication of each finding, not just the fact.
 
-- Write in clear, direct prose{feedback_section}
+- Write in clear, direct prose.{feedback_section}
 
 Research question: {question}
 
@@ -88,29 +109,28 @@ Search results:
 
 Answer:"""
 
-response = groq_client.chat.completions.create(
+    response = groq_client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        max_completion_tokens=4000,
+        temperature=0,
+        reasoning_effort="low",
+    )
 
-model=MODEL,
+    answer = response.choices[0].message.content or ""
 
-messages=[{"role": "user", "content": prompt}],
+    return answer.strip(), search_results
 
-max_completion_tokens=4000,
-
-temperature=0,
-
-reasoning_effort="low"
-
-)
-
-answer = response.choices[0].message.content or ""
-
-return answer.strip(), search_results
 
 # --- Evaluator ---
 
 def evaluator(question: str, answer: str) -> tuple[str, str]:
-
-prompt = f"""You are a strict research editor. Your only job is to check whether this answer is complete.
+    prompt = f"""You are a strict research editor. Your only job is to check whether this answer is complete.
 
 Research question: {question}
 
@@ -120,7 +140,7 @@ Answer to evaluate:
 
 Check for these specific gaps:
 
-1. Are there major angles of this question that weren’t covered?
+1. Are there major angles of this question that weren't covered?
 
 2. Are there claims made without a named source — publication, institution, company filing, or official report?
 
@@ -138,7 +158,7 @@ Check for these specific gaps:
 
 9. Would a domain expert read this and immediately ask "but what about X?"
 
-If the answer passes all seven checks, respond with exactly:
+If the answer passes all nine checks, respond with exactly:
 
 VERDICT: PASS
 
@@ -154,111 +174,142 @@ GAPS:
 
 Be strict. If in doubt, FAIL."""
 
-response = groq_client.chat.completions.create(
+    response = groq_client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        max_completion_tokens=2000,
+        temperature=0,
+        reasoning_effort="low",
+    )
 
-model=MODEL,
+    evaluation = response.choices[0].message.content or ""
 
-messages=[{"role": "user", "content": prompt}],
+    if "VERDICT: PASS" in evaluation:
+        return "PASS", ""
 
-max_completion_tokens=2000,
+    gaps_match = re.search(
+        r"GAPS:(.*)",
+        evaluation,
+        re.DOTALL
+    )
 
-temperature=0,
+    gaps = (
+        gaps_match.group(1).strip()
+        if gaps_match
+        else "Gaps not specified"
+    )
 
-reasoning_effort="low"
+    return "FAIL", gaps
 
-)
-
-evaluation = response.choices[0].message.content or ""
-
-if "VERDICT: PASS" in evaluation:
-
-return "PASS", ""
-
-else:
-
-gaps_match = re.search(r"GAPS:(.*)", evaluation, re.DOTALL)
-
-gaps = gaps_match.group(1).strip() if gaps_match else "Gaps not specified"
-
-return "FAIL", gaps
 
 # --- Loop ---
 
-def research_loop(question: str, status_container, output_container):
+def research_loop(
+    question: str,
+    status_container,
+    output_container
+):
+    feedback = ""
+    final_answer = ""
 
-feedback = ""
+    for round_num in range(1, MAX_ROUNDS + 1):
+        status_container.markdown(
+            f"**Round {round_num}** — Searching..."
+        )
 
-final_answer = ""
+        answer, sources = generator(
+            question,
+            feedback
+        )
 
-for round_num in range(1, MAX_ROUNDS + 1):
+        status_container.markdown(
+            f"**Round {round_num}** — Evaluating completeness..."
+        )
 
-status_container.markdown(f"**Round {round_num}** — Searching...")
+        verdict, gaps = evaluator(
+            question,
+            answer
+        )
 
-answer, sources = generator(question, feedback)
+        if verdict == "PASS":
+            status_container.markdown(
+                f"**Round {round_num}** — ✅ Complete"
+            )
 
-status_container.markdown(f"**Round {round_num}** — Evaluating completeness...")
+            final_answer = answer
+            break
 
-verdict, gaps = evaluator(question, answer)
+        status_container.markdown(
+            f"**Round {round_num}** — ❌ Gaps found:\n{gaps}"
+        )
 
-if verdict == "PASS":
+        feedback = gaps
+        final_answer = answer
 
-status_container.markdown(f"**Round {round_num}** — ✅ Complete")
+        if round_num == MAX_ROUNDS:
+            status_container.markdown(
+                f"**Round {round_num}** — ⚠️ Max rounds reached. Returning best answer."
+            )
 
-final_answer = answer
+    output_container.markdown(
+        "### Research Complete"
+    )
 
-break
+    output_container.markdown(
+        final_answer
+    )
 
-else:
-
-status_container.markdown(f"**Round {round_num}** — ❌ Gaps found:\n{gaps}")
-
-feedback = gaps
-
-final_answer = answer
-
-if round_num == MAX_ROUNDS:
-
-status_container.markdown(f"**Round {round_num}** — ⚠️ Max rounds reached. Returning best answer.")
-
-output_container.markdown("### Research Complete")
-
-output_container.markdown(final_answer)
 
 # --- Streamlit UI ---
 
-st.set_page_config(page_title="Research Loop", page_icon="🔍", layout="wide")
-
 st.title("🔍 Research Loop")
 
-st.markdown("Ask a broad research question. The loop keeps searching until the answer is complete.")
-
-question = st.text_area(
-
-"Your research question",
-
-placeholder="e.g. What’s actually happening in the Indian D2C funding space right now?",
-
-height=100
-
+st.markdown(
+    "Ask a broad research question. "
+    "The loop keeps searching until the answer is complete."
 )
 
-if st.button("Run Research Loop", type="primary"):
+question = st.text_area(
+    "Your research question",
+    placeholder=(
+        "e.g. What's actually happening in the "
+        "Indian D2C funding space right now?"
+    ),
+    height=100,
+)
 
-if not question.strip():
+if st.button(
+    "Run Research Loop",
+    type="primary"
+):
+    if not question.strip():
+        st.error(
+            "Please enter a research question."
+        )
 
-st.error("Please enter a research question.")
+    else:
+        st.markdown("---")
+        st.markdown("**Loop Progress**")
 
-else:
+        status_container = st.empty()
 
-st.markdown("---")
+        st.markdown("---")
 
-st.markdown("**Loop Progress**")
+        output_container = st.container()
 
-status_container = st.empty()
-
-st.markdown("---")
-
-output_container = st.container()
+        with st.spinner(
+            "Running research loop..."
+        ):
+            research_loop(
+                question,
+                status_container,
+                output_container
+            )
 
 with st.spinner("Running research loop..."):
 
