@@ -74,13 +74,12 @@ def generator(question: str, feedback: str = "") -> tuple[str, str]:
         else ""
     )
 
-    prompt = f"""You are a research assistant producing answers for a professional Indian business newsletter.
-
-Your job: answer the research question below using the search results provided.
+    prompt = f"""You are a research assistant producing rigorous answers for a professional business audience. Your job: answer the research question below using the search results provided.
 
 SOURCE RULES — these are strict and non-negotiable:
 
-- PREFER, in this order: (1) company filings, annual reports, investor presentations, earnings releases; (2) named business publications with a bylined journalist (Business Standard, Economic Times, Mint, Reuters, Bloomberg); (3) government or regulatory data.
+- PREFER, in this order: (1) company filings, annual reports, investor presentations, earnings releases; (2) named reputable business and financial publications with a named journalist
+(e.g., Reuters, Bloomberg, Financial Times, The Wall Street Journal, CNBC, Fortune, Forbes); (3) government or regulatory data.
 
 - NEVER cite: LinkedIn posts, Medium posts, personal blogs, PESTEL/SWOT analysis sites, listicles, SEO content farms, HBR case-study summaries republished by third parties, or any page that doesn't name a specific author or institution.
 
@@ -153,7 +152,7 @@ Check for these specific gaps:
 
 6. If two sources disagree, has that contradiction been named explicitly — or was it averaged into one clean sentence?
 
-7. Is there a named company, market, or India-specific context where relevant — or is the answer too generic to be useful for an Indian business audience?
+7. Is the answer specific to the company, market, geography, or industry actually asked about — or is it too generic to be useful?
 
 8. Does the answer explain the business or market implication of each finding — not just the fact itself?
 
