@@ -286,7 +286,6 @@ question = st.text_area(
 if st.button("Run Research Loop", type="primary"):
     if not question.strip():
         st.error("Please enter a research question.")
-
     else:
         st.markdown("---")
         st.markdown("**Loop Progress**")
@@ -297,12 +296,4 @@ if st.button("Run Research Loop", type="primary"):
 
         output_container = st.container()
 
-        with st.spinner("Running research loop..."):
-            research_loop(
-                question,
-                status_container,
-                output_container
-            )
-with st.spinner("Running research loop..."):
-
-research_loop(question, status_container, output_container)
+        with st.spinner("Running research loop..."): research_loop(question, status_container, output_container)
