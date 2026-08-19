@@ -10,11 +10,11 @@ from tavily import TavilyClient
 
 # --- Clients ---
 
-groq_client = Groq(api_key=os.environ.get(”GROQ_API_KEY”))
+groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-tavily_client = TavilyClient(api_key=os.environ.get(”TAVILY_API_KEY”))
+tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
 
-MODEL = “openai/gpt-oss-120b”
+MODEL = "openai/gpt-oss-120b"
 
 MAX_ROUNDS = 4
 
@@ -26,7 +26,7 @@ results = tavily_client.search(
 
 query=query,
 
-search_depth=”advanced”,
+search_depth="advanced",
 
 max_results=5,
 
@@ -36,27 +36,27 @@ include_raw_content=False
 
 formatted = []
 
-for r in results.get(”results”, []):
+for r in results.get("results", []):
 
-formatted.append(f”Source: {r[’url’]}\nTitle: {r[’title’]}\nContent: {r[’content’]}\n”)
+formatted.append(f"Source: {r[’url’]}\nTitle: {r[’title’]}\nContent: {r[’content’]}\n")
 
-return “\n”.join(formatted)
+return "\n".join(formatted)
 
 # --- Generator ---
 
-def generator(question: str, feedback: str = “”) -> tuple[str, str]:
+def generator(question: str, feedback: str = "") -> tuple[str, str]:
 
 search_query = question
 
 if feedback:
 
-search_query = f”{question} {feedback}”
+search_query = f"{question} {feedback}"
 
 search_results = search(search_query)
 
-feedback_section = f”\n\nPrevious evaluation feedback — address these gaps specifically:\n{feedback}” if feedback else “”
+feedback_section = f"\n\nPrevious evaluation feedback — address these gaps specifically:\n{feedback}" if feedback else ""
 
-prompt = f”“”You are a research assistant producing answers for a professional Indian business newsletter.
+prompt = f"""You are a research assistant producing answers for a professional Indian business newsletter.
 
 Your job: answer the research question below using the search results provided.
 
@@ -90,23 +90,23 @@ Search results:
 
 {search_results}
 
-Answer:”“”
+Answer:"""
 
 response = groq_client.chat.completions.create(
 
 model=MODEL,
 
-messages=[{”role”: “user”, “content”: prompt}],
+messages=[{"role": "user", "content": prompt}],
 
 max_completion_tokens=4000,
 
 temperature=0,
 
-reasoning_effort=”low”
+reasoning_effort="low"
 
 )
 
-answer = response.choices[0].message.content or “”
+answer = response.choices[0].message.content or ""
 
 return answer.strip(), search_results
 
@@ -114,7 +114,7 @@ return answer.strip(), search_results
 
 def evaluator(question: str, answer: str) -> tuple[str, str]:
 
-prompt = f”“”You are a strict research editor. Your only job is to check whether this answer is complete.
+prompt = f"""You are a strict research editor. Your only job is to check whether this answer is complete.
 
 Research question: {question}
 
@@ -140,7 +140,7 @@ Check for these specific gaps:
 
 8. Does the answer explain the business or market implication of each finding — not just the fact itself?
 
-9. Would a domain expert read this and immediately ask “but what about X?”
+9. Would a domain expert read this and immediately ask "but what about X?"
 
 If the answer passes all seven checks, respond with exactly:
 
@@ -156,57 +156,57 @@ GAPS:
 
 - [specific gap 2]
 
-Be strict. If in doubt, FAIL.”“”
+Be strict. If in doubt, FAIL."""
 
 response = groq_client.chat.completions.create(
 
 model=MODEL,
 
-messages=[{”role”: “user”, “content”: prompt}],
+messages=[{"role": "user", "content": prompt}],
 
 max_completion_tokens=2000,
 
 temperature=0,
 
-reasoning_effort=”low”
+reasoning_effort="low"
 
 )
 
-evaluation = response.choices[0].message.content or “”
+evaluation = response.choices[0].message.content or ""
 
-if “VERDICT: PASS” in evaluation:
+if "VERDICT: PASS" in evaluation:
 
-return “PASS”, “”
+return "PASS", ""
 
 else:
 
-gaps_match = re.search(r”GAPS:(.*)”, evaluation, re.DOTALL)
+gaps_match = re.search(r"GAPS:(.*)", evaluation, re.DOTALL)
 
-gaps = gaps_match.group(1).strip() if gaps_match else “Gaps not specified”
+gaps = gaps_match.group(1).strip() if gaps_match else "Gaps not specified"
 
-return “FAIL”, gaps
+return "FAIL", gaps
 
 # --- Loop ---
 
 def research_loop(question: str, status_container, output_container):
 
-feedback = “”
+feedback = ""
 
-final_answer = “”
+final_answer = ""
 
 for round_num in range(1, MAX_ROUNDS + 1):
 
-status_container.markdown(f”**Round {round_num}** — Searching...”)
+status_container.markdown(f"**Round {round_num}** — Searching...")
 
 answer, sources = generator(question, feedback)
 
-status_container.markdown(f”**Round {round_num}** — Evaluating completeness...”)
+status_container.markdown(f"**Round {round_num}** — Evaluating completeness...")
 
 verdict, gaps = evaluator(question, answer)
 
-if verdict == “PASS”:
+if verdict == "PASS":
 
-status_container.markdown(f”**Round {round_num}** — ✅ Complete”)
+status_container.markdown(f"**Round {round_num}** — ✅ Complete")
 
 final_answer = answer
 
@@ -214,7 +214,7 @@ break
 
 else:
 
-status_container.markdown(f”**Round {round_num}** — ❌ Gaps found:\n{gaps}”)
+status_container.markdown(f"**Round {round_num}** — ❌ Gaps found:\n{gaps}")
 
 feedback = gaps
 
@@ -222,48 +222,48 @@ final_answer = answer
 
 if round_num == MAX_ROUNDS:
 
-status_container.markdown(f”**Round {round_num}** — ⚠️ Max rounds reached. Returning best answer.”)
+status_container.markdown(f"**Round {round_num}** — ⚠️ Max rounds reached. Returning best answer.")
 
-output_container.markdown(”### Research Complete”)
+output_container.markdown("### Research Complete")
 
 output_container.markdown(final_answer)
 
 # --- Streamlit UI ---
 
-st.set_page_config(page_title=”Research Loop”, page_icon=”🔍”, layout=”wide”)
+st.set_page_config(page_title="Research Loop", page_icon="🔍", layout="wide")
 
-st.title(”🔍 Research Loop”)
+st.title("🔍 Research Loop")
 
-st.markdown(”Ask a broad research question. The loop keeps searching until the answer is complete.”)
+st.markdown("Ask a broad research question. The loop keeps searching until the answer is complete.")
 
 question = st.text_area(
 
-“Your research question”,
+"Your research question",
 
-placeholder=”e.g. What’s actually happening in the Indian D2C funding space right now?”,
+placeholder="e.g. What’s actually happening in the Indian D2C funding space right now?",
 
 height=100
 
 )
 
-if st.button(”Run Research Loop”, type=”primary”):
+if st.button("Run Research Loop", type="primary"):
 
 if not question.strip():
 
-st.error(”Please enter a research question.”)
+st.error("Please enter a research question.")
 
 else:
 
-st.markdown(”---”)
+st.markdown("---")
 
-st.markdown(”**Loop Progress**”)
+st.markdown("**Loop Progress**")
 
 status_container = st.empty()
 
-st.markdown(”---”)
+st.markdown("---")
 
 output_container = st.container()
 
-with st.spinner(”Running research loop...”):
+with st.spinner("Running research loop..."):
 
 research_loop(question, status_container, output_container)
