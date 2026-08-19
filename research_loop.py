@@ -41,21 +41,22 @@ def search_web(query: str) -> str:
     results = tavily_client.search(
         query=query,
         search_depth="advanced",
-        max_results=5,
+        max_results=3,
         include_raw_content=False,
     )
 
     formatted = []
 
     for r in results.get("results", []):
+        content = r.get("content", "")[:2500]
+
         formatted.append(
             f"Source: {r.get('url', '')}\n"
             f"Title: {r.get('title', '')}\n"
-            f"Content: {r.get('content', '')}\n"
+            f"Content: {content}\n"
         )
 
     return "\n".join(formatted)
-
 
 # --- Generator ---
 
@@ -117,7 +118,7 @@ Answer:"""
                 "content": prompt
             }
         ],
-        max_completion_tokens=4000,
+        max_completion_tokens=2000,
         temperature=0,
         reasoning_effort="low",
     )
@@ -182,7 +183,7 @@ Be strict. If in doubt, FAIL."""
                 "content": prompt
             }
         ],
-        max_completion_tokens=2000,
+        max_completion_tokens=1000,
         temperature=0,
         reasoning_effort="low",
     )
